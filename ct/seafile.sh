@@ -16,6 +16,7 @@ var_unprivileged="${var_unprivileged:-1}"
 
 header_info "$APP"
 variables
+var_install="seafile-install"
 color
 catch_errors
 
@@ -75,6 +76,32 @@ function update_script() {
 
   msg_ok "Updated successfully!"
   exit
+}
+
+CUSTOM_REPO="https://raw.githubusercontent.com/yann-soliman/ProxmoxVE/feat/seafile-script"
+
+function build_container() {
+  export FUNCTIONS_FILE_PATH="$(curl -fsSL ${CUSTOM_REPO}/misc/install.func)"
+  if [[ -z "$FUNCTIONS_FILE_PATH" || ${#FUNCTIONS_FILE_PATH} -lt 100 ]]; then
+    msg_error "Unable to load install.func from custom repo"
+    exit 1
+  fi
+
+  header_info "$APP"
+  create_lxc
+  if [[ "$CT_CREATED" != "1" ]]; then
+    return
+  fi
+
+  msg_info "Running custom Seafile install script from fork"
+  echo -e "${TAB}${BGN}${CUSTOM_REPO}/install/${var_install}.sh${CL}"
+  lxc-attach -n "$CTID" -- bash -c "$(curl -fsSL ${CUSTOM_REPO}/install/${var_install}.sh)"
+  local lxc_exit=$?
+  if [[ $lxc_exit -ne 0 ]]; then
+    msg_error "Custom Seafile install script failed with exit code ${lxc_exit}"
+    exit $lxc_exit
+  fi
+  msg_ok "Custom Seafile install script completed"
 }
 
 start
