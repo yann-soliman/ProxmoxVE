@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
-# Copyright (c) 2021-2025 community-scripts ORG
+# Copyright (c) 2021-2026 community-scripts ORG
 # Author: chrisbenincasa
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
-# Source: https://tunarr.com/
+# Source: https://tunarr.com/ | Github: https://github.com/chrisbenincasa/tunarr
 
 APP="Tunarr"
 var_tags="${var_tags:-iptv}"
@@ -40,7 +40,9 @@ function update_script() {
       msg_error "Backup failed: /usr/local/share/tunarr does not exist"
     fi
 
-    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "tunarr" "chrisbenincasa/tunarr" "singlefile" "latest" "/opt/tunarr" "*linux-x64"
+    CLEAN_INSTALL=1 fetch_and_deploy_gh_release "tunarr" "chrisbenincasa/tunarr" "prebuild" "latest" "/opt/tunarr" "*linux-x64.tar.gz"
+    cd /opt/tunarr
+    mv tunarr* tunarr
 
     msg_info "Starting Service"
     systemctl start tunarr
@@ -74,7 +76,7 @@ start
 build_container
 description
 
-msg_ok "Completed Successfully!\n"
+msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW} Access it using the following URL:${CL}"
 echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:8000${CL}"

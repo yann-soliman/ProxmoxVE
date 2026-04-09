@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2025 community-scripts ORG
+# Copyright (c) 2021-2026 community-scripts ORG
 # Author: Slaviša Arežina (tremor021) | Co-Author: Stavros (steveiliop56)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://github.com/steveiliop56/tinyauth
@@ -36,9 +36,9 @@ msg_ok "Installed Tinyauth"
 read -r -p "${TAB3}Enter your Tinyauth subdomain (e.g. https://tinyauth.example.com): " app_url
 
 cat <<EOF >/opt/tinyauth/.env
-DATABASE_PATH=/opt/tinyauth/database.db
-USERS='${USER}'
-APP_URL=${app_url}
+TINYAUTH_DATABASE_PATH=/opt/tinyauth/database.db
+TINYAUTH_AUTH_USERS='${USER}'
+TINYAUTH_APPURL=${app_url}
 EOF
 
 msg_info "Creating Service"

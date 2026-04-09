@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
-# Copyright (c) 2021-2025 community-scripts ORG
+# Copyright (c) 2021-2026 community-scripts ORG
 # Author: MickLesk (CanbiZ)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://github.com/clusterzx/paperless-ai
@@ -33,10 +33,23 @@ function update_script() {
     systemctl stop paperless-ai paperless-rag
     msg_ok "Stopped Service"
 
-    fetch_and_deploy_gh_release "paperless-ai" "clusterzx/paperless-ai"
+    msg_info "Backing up data"
+    cp -r /opt/paperless-ai/data /opt/paperless-ai-data-backup
+    msg_ok "Backed up data"
+
+    fetch_and_deploy_gh_release "paperless-ai" "clusterzx/paperless-ai" "tarball"
+
+    msg_info "Restoring data"
+    cp -r /opt/paperless-ai-data-backup/* /opt/paperless-ai/data/
+    rm -rf /opt/paperless-ai-data-backup
+    msg_ok "Restored data"
 
     msg_info "Updating Paperless-AI"
     cd /opt/paperless-ai
+    if [[ ! -d /opt/paperless-ai/venv ]]; then
+      msg_info "Recreating Python venv"
+      $STD python3 -m venv /opt/paperless-ai/venv
+    fi
     source /opt/paperless-ai/venv/bin/activate
     $STD pip install --upgrade pip
     $STD pip install --no-cache-dir -r requirements.txt
@@ -58,7 +71,7 @@ start
 build_container
 description
 
-msg_ok "Completed Successfully!\n"
+msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW} Access it using the following URL:${CL}"
 echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:3000${CL}"

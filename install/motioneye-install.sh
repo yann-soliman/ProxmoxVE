@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2025 tteck
+# Copyright (c) 2021-2026 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://github.com/motioneye-project/motioneye
@@ -12,6 +12,8 @@ catch_errors
 setting_up_container
 network_check
 update_os
+
+setup_hwaccel
 
 msg_info "Installing Dependencies"
 $STD apt install -y git
@@ -48,6 +50,7 @@ msg_ok "Installed MotionEye"
 
 msg_info "Creating Service"
 curl -fsSL "https://raw.githubusercontent.com/motioneye-project/motioneye/dev/motioneye/extra/motioneye.systemd" -o "/etc/systemd/system/motioneye.service"
+sed -i 's/^User=.*/User=root/' /etc/systemd/system/motioneye.service
 systemctl enable -q --now motioneye
 msg_ok "Created Service"
 

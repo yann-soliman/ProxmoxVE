@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2025 community-scripts ORG
+# Copyright (c) 2021-2026 community-scripts ORG
 # Author: MickLesk (CanbiZ)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://www.postgresql.org/
@@ -14,7 +14,7 @@ network_check
 update_os
 
 read -r -p "${TAB3}Enter PostgreSQL version (15/16/17): " ver
-[[ $ver =~ ^(15|16|17)$ ]] || { echo "Invalid version"; exit 1; }
+[[ $ver =~ ^(15|16|17)$ ]] || { echo "Invalid version"; exit 64; }
 
 msg_info "Installing PostgreSQL ${ver}"
 $STD apk add --no-cache postgresql${ver} postgresql${ver}-contrib postgresql${ver}-openrc sudo

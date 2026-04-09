@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
-# Copyright (c) 2021-2025 community-scripts ORG
+# Copyright (c) 2021-2026 community-scripts ORG
 # Author: Slaviša Arežina (tremor021)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://graylog.org/
@@ -45,7 +45,7 @@ function update_script() {
     curl -fsSL "https://packages.graylog2.org/repo/packages/graylog-7.0-repository_latest.deb" -o "graylog-7.0-repository_latest.deb"
     $STD dpkg -i graylog-7.0-repository_latest.deb
     $STD apt update
-    $STD apt install -y graylog-server graylog-datanode
+    ensure_dependencies graylog-server graylog-datanode
     rm -f graylog-7.0-repository_latest.deb
     msg_ok "Updated Graylog"
   elif dpkg --compare-versions "$CURRENT_VERSION" ge "7.0"; then
@@ -64,10 +64,16 @@ function update_script() {
 }
 
 start
+
+if [[ $(sysctl -n vm.max_map_count 2>/dev/null) -lt 262144 ]]; then
+  sysctl -w vm.max_map_count=262144 >/dev/null 2>&1
+  echo "vm.max_map_count=262144" >/etc/sysctl.d/graylog.conf
+fi
+
 build_container
 description
 
-msg_ok "Completed Successfully!\n"
+msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW} Access it using the following URL:${CL}"
 echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:9000${CL}"

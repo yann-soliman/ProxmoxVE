@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2025 tteck
+# Copyright (c) 2021-2026 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://www.postgresql.org/
@@ -16,7 +16,7 @@ update_os
 read -r -p "${TAB3}Enter PostgreSQL version (15/16/17/18): " ver
 [[ $ver =~ ^(15|16|17|18)$ ]] || {
   echo "Invalid version"
-  exit 1
+  exit 64
 }
 PG_VERSION=$ver setup_postgresql
 

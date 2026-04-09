@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2025 community-scripts ORG
+# Copyright (c) 2021-2026 community-scripts ORG
 # Author: tremor021
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://www.zerotier.com/
@@ -31,7 +31,7 @@ if gpg --verify /tmp/zerotier-install.sh >/dev/null 2>&1; then
   $STD bash /tmp/zerotier-install.sh
 else
   msg_warn "Could not verify signature of Zerotier-One install script. Exiting..."
-  exit 1
+  exit 250
 fi
 msg_ok "Setup Zerotier-One"
 

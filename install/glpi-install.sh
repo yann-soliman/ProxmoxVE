@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2025 community-scripts ORG
+# Copyright (c) 2021-2026 community-scripts ORG
 # Author: Nícolas Pastorello (opastorello)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://www.glpi-project.org/
@@ -137,7 +137,7 @@ rm -rf /opt/glpi-${RELEASE}.tgz
 msg_ok "Setup Service"
 
 msg_info "Setup Cronjob"
-echo "* * * * * php /opt/glpi/front/cron.php" | crontab -
+echo "* * * * * php /opt/glpi/front/cron.php" | crontab -u www-data -
 msg_ok "Setup Cronjob"
 
 msg_info "Update PHP Params"

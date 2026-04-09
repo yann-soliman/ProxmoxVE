@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2025 community-scripts ORG
+# Copyright (c) 2021-2026 community-scripts ORG
 # Author: MickLesk (CanbiZ)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 
@@ -59,7 +59,7 @@ EOF
 else
   msg_error "Failed to download or verify GPG key from $KEY_URL"
   [[ -f "$TMP_KEY_CONTENT" ]] && rm -f "$TMP_KEY_CONTENT"
-  exit 1
+  exit 250
 fi
 rm -f "$TMP_KEY_CONTENT"
 

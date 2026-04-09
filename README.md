@@ -5,7 +5,7 @@
   <p><em>A Community Legacy in Memory of @tteck</em></p>
 
   <p>
-    <a href="https://helper-scripts.com">
+    <a href="https://community-scripts.org">
       <img src="https://img.shields.io/badge/🌐_Website-Visit-4c9b3f?style=for-the-badge&labelColor=2d3748" alt="Website" />
     </a>
     <a href="https://discord.gg/3AnUqsXnmK">
@@ -30,8 +30,8 @@
 
   <br />
 
-> **Simplify your Proxmox VE setup with community-driven automation scripts**  
-> Originally created by tteck, now maintained and expanded by the community
+ **Simplify your Proxmox VE setup with community-driven automation scripts**  
+ Originally created by tteck, now maintained and expanded by the community
 
 </div>
 
@@ -130,7 +130,7 @@ Choose your preferred installation method:
 
 The fastest way to get started:
 
-1. Visit **[helper-scripts.com](https://helper-scripts.com/)** 🌐
+1. Visit **[community-scripts.org](https://community-scripts.org/)** 🌐
 2. Search for your desired script (e.g., "Home Assistant", "Docker")
 3. Copy the bash command displayed on the script page
 4. Open your **Proxmox Shell** and paste the command
@@ -239,17 +239,34 @@ This project is maintained by volunteers in memory of tteck. Your support helps 
 
 ---
 
-## 📈 Project Growth
+## 📈 Project Statistics
+<p align="center">
+  <img
+    src="https://repobeats.axiom.co/api/embed/57edde03e00f88d739bdb5b844ff7d07dd079375.svg"
+    alt="Repobeats analytics"
+    width="650"
+  />
+</p>
 
-<div align="center">
+<p align="center">
   <a href="https://star-history.com/#community-scripts/ProxmoxVE&Date">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=community-scripts/ProxmoxVE&type=Date&theme=dark" />
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=community-scripts/ProxmoxVE&type=Date" />
-      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=community-scripts/ProxmoxVE&type=Date" />
+      <source
+        media="(prefers-color-scheme: dark)"
+        srcset="https://api.star-history.com/svg?repos=community-scripts/ProxmoxVE&type=Date&theme=dark"
+      />
+      <source
+        media="(prefers-color-scheme: light)"
+        srcset="https://api.star-history.com/svg?repos=community-scripts/ProxmoxVE&type=Date"
+      />
+      <img
+        alt="Star History Chart"
+        src="https://api.star-history.com/svg?repos=community-scripts/ProxmoxVE&type=Date"
+        width="650"
+      />
     </picture>
   </a>
-</div>
+</p>
 
 ---
 

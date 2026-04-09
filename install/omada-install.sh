@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2025 tteck
+# Copyright (c) 2021-2026 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://www.tp-link.com/us/support/download/omada-software-controller/
@@ -28,7 +28,7 @@ fi
 
 if ! dpkg -l | grep -q 'libssl1.1'; then
   msg_info "Installing libssl (if needed)"
-  curl -fsSL "https://security.debian.org/debian-security/pool/updates/main/o/openssl/libssl1.1_1.1.1w-0+deb11u4_amd64.deb" -o "/tmp/libssl.deb"
+  curl -fsSL "https://security.debian.org/debian-security/pool/updates/main/o/openssl/libssl1.1_1.1.1w-0+deb11u5_amd64.deb" -o "/tmp/libssl.deb"
   $STD dpkg -i /tmp/libssl.deb
   rm -f /tmp/libssl.deb
   msg_ok "Installed libssl1.1"

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-# Copyright (c) 2021-2025 community-scripts ORG
+# Copyright (c) 2021-2026 community-scripts ORG
 # Author: MickLesk (CanbiZ)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
-# Source: https://mealie.io
+# Source: https://mealie.io | Github: https://github.com/mealie-recipes/mealie
 
 source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
@@ -28,7 +28,7 @@ $STD apt install -y \
 msg_ok "Installed Dependencies"
 
 PYTHON_VERSION="3.12" setup_uv
-POSTGRES_VERSION="16" setup_postgresql
+PG_VERSION="16" setup_postgresql
 NODE_MODULE="yarn" NODE_VERSION="24" setup_nodejs
 fetch_and_deploy_gh_release "mealie" "mealie-recipes/mealie" "tarball" "latest" "/opt/mealie"
 PG_DB_NAME="mealie_db" PG_DB_USER="mealie_user" PG_DB_GRANT_SUPERUSER="true" setup_postgresql_db
@@ -40,7 +40,6 @@ msg_ok "Installed Python Dependencies"
 
 msg_info "Building Frontend"
 MEALIE_VERSION=$(<$HOME/.mealie)
-CONTAINER_IP=$(hostname -I | awk '{print $1}')
 export NUXT_TELEMETRY_DISABLED=1
 cd /opt/mealie/frontend
 $STD sed -i "s|https://github.com/mealie-recipes/mealie/commit/|https://github.com/mealie-recipes/mealie/releases/tag/|g" /opt/mealie/frontend/pages/admin/site-settings.vue
@@ -79,7 +78,7 @@ POSTGRES_DB=${PG_DB_NAME}
 PRODUCTION=true
 HOST=0.0.0.0
 PORT=9000
-BASE_URL=http://${CONTAINER_IP}:9000
+BASE_URL=http://${LOCAL_IP}:9000
 EOF
 msg_ok "Wrote Environment File"
 

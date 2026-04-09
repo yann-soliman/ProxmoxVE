@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
-# Copyright (c) 2021-2025 tteck
+# Copyright (c) 2021-2026 tteck
 # Author: tteck (tteckster)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
-# Source: https://www.nocodb.com/
+# Source: https://www.nocodb.com/ | Github: https://github.com/nocodb/nocodb
 
 APP="NocoDB"
 var_tags="${var_tags:-noCode}"
@@ -23,10 +23,12 @@ function update_script() {
   header_info
   check_container_storage
   check_container_resources
+  #RELEASE="0.301.1"
   if [[ ! -f /etc/systemd/system/nocodb.service ]]; then
     msg_error "No ${APP} Installation Found!"
     exit
   fi
+  #if check_for_gh_release "nocodb" "nocodb/nocodb" "${RELEASE}"; then
   if check_for_gh_release "nocodb" "nocodb/nocodb"; then
     msg_info "Stopping Service"
     systemctl stop nocodb
@@ -46,7 +48,7 @@ start
 build_container
 description
 
-msg_ok "Completed Successfully!\n"
+msg_ok "Completed successfully!\n"
 echo -e "${CREATING}${GN}${APP} setup has been successfully initialized!${CL}"
 echo -e "${INFO}${YW} Access it using the following URL:${CL}"
 echo -e "${TAB}${GATEWAY}${BGN}http://${IP}:8080/dashboard${CL}"
