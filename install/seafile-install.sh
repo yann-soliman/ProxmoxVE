@@ -3,7 +3,7 @@
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: Tiklaw (OpenClaw)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
-# Source: https://www.seafile.com/ | Github: https://github.com/haiwen/seafile-docker
+# Source: https://manual.seafile.com/latest/setup_binary/installation/
 
 source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
 color
@@ -15,91 +15,219 @@ update_os
 
 msg_info "Installing Dependencies"
 $STD apt install -y \
-  openssl
+  mariadb-server \
+  redis-server \
+  python3 \
+  python3-dev \
+  python3-setuptools \
+  python3-pip \
+  python3-ldap \
+  python3-rados \
+  python3.13-venv \
+  libmariadb-dev-compat \
+  default-libmysqlclient-dev \
+  libmemcached-dev \
+  libldap2-dev \
+  libsasl2-dev \
+  ldap-utils \
+  build-essential \
+  pkg-config \
+  libhiredis-dev \
+  wget \
+  pwgen
 msg_ok "Installed Dependencies"
 
-setup_docker
+SEAFILE_ROOT=/opt/seafile
+SEAFILE_USER=seafile
+SEAFILE_CONF_DIR=${SEAFILE_ROOT}/conf
+SEAFILE_STATE_DIR=/etc/seafile-installer
+SEAFILE_SETUP_ENV=/tmp/seafile-setup.env
+mkdir -p "${SEAFILE_ROOT}" "${SEAFILE_STATE_DIR}"
+
 get_lxc_ip
 
-SEAFILE_DIR=/opt/seafile
-SEAFILE_DATA_DIR=${SEAFILE_DIR}/data
-SEAFILE_DB_DIR=${SEAFILE_DIR}/mysql
-mkdir -p "${SEAFILE_DATA_DIR}" "${SEAFILE_DB_DIR}"
+msg_info "Collecting Seafile installation parameters"
+read -r -p "Seafile Pro tarball URL: " SEAFILE_TARBALL_URL
+if [[ -z "${SEAFILE_TARBALL_URL}" ]]; then
+  msg_error "A Seafile Pro tarball URL is required"
+  exit 1
+fi
+read -r -p "Seafile server name [seafile]: " SEAFILE_SERVER_NAME
+SEAFILE_SERVER_NAME=${SEAFILE_SERVER_NAME:-seafile}
+read -r -p "Seafile server hostname or IP [${LOCAL_IP}]: " SEAFILE_SERVER_HOSTNAME
+SEAFILE_SERVER_HOSTNAME=${SEAFILE_SERVER_HOSTNAME:-$LOCAL_IP}
+read -r -p "Fileserver port [8082]: " SEAFILE_FILESERVER_PORT
+SEAFILE_FILESERVER_PORT=${SEAFILE_FILESERVER_PORT:-8082}
+read -r -p "Admin email [admin@local.invalid]: " SEAFILE_ADMIN_EMAIL
+SEAFILE_ADMIN_EMAIL=${SEAFILE_ADMIN_EMAIL:-admin@local.invalid}
+SEAFILE_ADMIN_PASSWORD=$(pwgen -s 20 1)
+SEAFILE_DB_PASS=$(pwgen -s 24 1)
+JWT_PRIVATE_KEY=$(pwgen -s 40 1)
 
-SEAFILE_DB_USER="seafile"
-SEAFILE_DB_PASS="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 20)"
-MYSQL_ROOT_PASS="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 20)"
-SEAFILE_ADMIN_EMAIL="admin@local.invalid"
-SEAFILE_ADMIN_PASS="$(openssl rand -base64 24 | tr -dc 'A-Za-z0-9' | head -c 20)"
-SEAFILE_SERVER_HOSTNAME="${LOCAL_IP}"
-SEAFILE_SERVER_PROTOCOL="http"
+msg_info "Persisting installer state"
+cat <<STATE_EOF > ${SEAFILE_STATE_DIR}/seafile-installer.conf
+SEAFILE_TARBALL_URL='${SEAFILE_TARBALL_URL}'
+SEAFILE_SERVER_NAME='${SEAFILE_SERVER_NAME}'
+SEAFILE_SERVER_HOSTNAME='${SEAFILE_SERVER_HOSTNAME}'
+SEAFILE_FILESERVER_PORT='${SEAFILE_FILESERVER_PORT}'
+SEAFILE_ADMIN_EMAIL='${SEAFILE_ADMIN_EMAIL}'
+STATE_EOF
+chmod 600 ${SEAFILE_STATE_DIR}/seafile-installer.conf
+msg_ok "Persisted installer state"
 
-msg_info "Creating Seafile credentials file"
-cat <<CREDS_EOF > ~/seafile.creds
-Seafile URL: ${SEAFILE_SERVER_PROTOCOL}://${SEAFILE_SERVER_HOSTNAME}
+msg_info "Preparing MariaDB and Redis"
+systemctl enable -q --now mariadb redis-server
+mariadb <<SQL
+CREATE DATABASE IF NOT EXISTS ccnet_db CHARACTER SET utf8;
+CREATE DATABASE IF NOT EXISTS seafile_db CHARACTER SET utf8;
+CREATE DATABASE IF NOT EXISTS seahub_db CHARACTER SET utf8;
+CREATE USER IF NOT EXISTS 'seafile'@'localhost' IDENTIFIED BY '${SEAFILE_DB_PASS}';
+ALTER USER 'seafile'@'localhost' IDENTIFIED BY '${SEAFILE_DB_PASS}';
+GRANT ALL PRIVILEGES ON ccnet_db.* TO 'seafile'@'localhost';
+GRANT ALL PRIVILEGES ON seafile_db.* TO 'seafile'@'localhost';
+GRANT ALL PRIVILEGES ON seahub_db.* TO 'seafile'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+msg_ok "Prepared MariaDB and Redis"
+
+if ! id -u ${SEAFILE_USER} >/dev/null 2>&1; then
+  msg_info "Creating seafile user"
+  /usr/sbin/adduser --disabled-password --gecos "" ${SEAFILE_USER}
+  msg_ok "Created seafile user"
+fi
+chown -R ${SEAFILE_USER}:${SEAFILE_USER} ${SEAFILE_ROOT}
+
+msg_info "Setting up Python virtual environment"
+sudo -u ${SEAFILE_USER} python3 -m venv ${SEAFILE_ROOT}/python-venv
+sudo -u ${SEAFILE_USER} bash -lc "source ${SEAFILE_ROOT}/python-venv/bin/activate && pip3 install --timeout=3600 boto3 oss2 twilio configparser pytz sqlalchemy==2.0.* pymysql==1.1.* jinja2 django-pylibmc pylibmc redis django-redis psd-tools lxml django==5.2.* cffi==1.17.1 future==1.0.* mysqlclient==2.2.* captcha==0.7.* django_simple_captcha==0.6.* pyjwt==2.10.* djangosaml2==1.11.* pysaml2==7.5.* pycryptodome==3.23.* python-ldap==3.4.* pillow==11.3.* pillow-heif==1.0.* cairosvg==2.8.* scikit-learn==1.7.*"
+msg_ok "Set up Python virtual environment"
+
+msg_info "Downloading Seafile Pro tarball"
+TARBALL_NAME=$(basename "${SEAFILE_TARBALL_URL%%\?*}")
+TARBALL_PATH=${SEAFILE_ROOT}/${TARBALL_NAME}
+sudo -u ${SEAFILE_USER} wget -O "${TARBALL_PATH}" "${SEAFILE_TARBALL_URL}"
+msg_ok "Downloaded Seafile Pro tarball"
+
+msg_info "Extracting Seafile Pro tarball"
+sudo -u ${SEAFILE_USER} tar -C ${SEAFILE_ROOT} -xf "${TARBALL_PATH}"
+SEAFILE_EXTRACTED_DIR=$(tar -tf "${TARBALL_PATH}" | head -n1 | cut -d/ -f1)
+if [[ -z "${SEAFILE_EXTRACTED_DIR}" ]]; then
+  msg_error "Unable to determine extracted Seafile directory"
+  exit 1
+fi
+SEAFILE_INSTALL_DIR=${SEAFILE_ROOT}/${SEAFILE_EXTRACTED_DIR}
+ln -sfn ${SEAFILE_INSTALL_DIR} ${SEAFILE_ROOT}/seafile-server-latest
+msg_ok "Extracted Seafile Pro tarball"
+
+msg_info "Running Seafile setup"
+cat <<EOF_SETUP > ${SEAFILE_SETUP_ENV}
+export LC_ALL=C
+export PYTHONUNBUFFERED=1
+EOF_SETUP
+chown ${SEAFILE_USER}:${SEAFILE_USER} ${SEAFILE_SETUP_ENV}
+chmod 600 ${SEAFILE_SETUP_ENV}
+cat <<'SETUP_INPUT' | sudo -u ${SEAFILE_USER} bash -lc "source ${SEAFILE_SETUP_ENV}; source ${SEAFILE_ROOT}/python-venv/bin/activate; cd ${SEAFILE_INSTALL_DIR}; ./setup-seafile-mysql.sh"
+${SEAFILE_SERVER_NAME}
+${SEAFILE_SERVER_HOSTNAME}
+${SEAFILE_FILESERVER_PORT}
+2
+localhost
+3306
+seafile
+${SEAFILE_DB_PASS}
+ccnet_db
+seafile_db
+seahub_db
+SETUP_INPUT
+msg_ok "Ran Seafile setup"
+
+msg_info "Creating Seafile environment file"
+mkdir -p ${SEAFILE_CONF_DIR}
+cat <<ENV_EOF > ${SEAFILE_CONF_DIR}/.env
+JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY}
+SEAFILE_SERVER_PROTOCOL=http
+SEAFILE_SERVER_HOSTNAME=${SEAFILE_SERVER_HOSTNAME}
+SEAFILE_MYSQL_DB_HOST=localhost
+SEAFILE_MYSQL_DB_PORT=3306
+SEAFILE_MYSQL_DB_USER=seafile
+SEAFILE_MYSQL_DB_PASSWORD=${SEAFILE_DB_PASS}
+SEAFILE_MYSQL_DB_CCNET_DB_NAME=ccnet_db
+SEAFILE_MYSQL_DB_SEAFILE_DB_NAME=seafile_db
+SEAFILE_MYSQL_DB_SEAHUB_DB_NAME=seahub_db
+CACHE_PROVIDER=redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+ENV_EOF
+chown ${SEAFILE_USER}:${SEAFILE_USER} ${SEAFILE_CONF_DIR}/.env
+chmod 600 ${SEAFILE_CONF_DIR}/.env
+msg_ok "Created Seafile environment file"
+
+msg_info "Creating run_with_venv helper"
+cat <<'EOF_VENV' > ${SEAFILE_ROOT}/run_with_venv.sh
+#!/bin/bash
+dir_name="$(cd "$(dirname "$0")" && pwd)"
+source "${dir_name}/python-venv/bin/activate"
+script="$1"
+shift 1
+exec "${dir_name}/seafile-server-latest/${script}" "$@"
+EOF_VENV
+chown ${SEAFILE_USER}:${SEAFILE_USER} ${SEAFILE_ROOT}/run_with_venv.sh
+chmod 755 ${SEAFILE_ROOT}/run_with_venv.sh
+msg_ok "Created run_with_venv helper"
+
+msg_info "Creating systemd services"
+cat <<EOF_SEAFILE >/etc/systemd/system/seafile.service
+[Unit]
+Description=Seafile
+After=network.target mariadb.service redis-server.service
+
+[Service]
+Type=forking
+ExecStart=bash ${SEAFILE_ROOT}/run_with_venv.sh seafile.sh start
+ExecStop=bash ${SEAFILE_ROOT}/seafile-server-latest/seafile.sh stop
+LimitNOFILE=infinity
+User=${SEAFILE_USER}
+Group=${SEAFILE_USER}
+
+[Install]
+WantedBy=multi-user.target
+EOF_SEAFILE
+
+cat <<EOF_SEAHUB >/etc/systemd/system/seahub.service
+[Unit]
+Description=Seafile hub
+After=network.target seafile.service
+
+[Service]
+Type=forking
+ExecStart=bash ${SEAFILE_ROOT}/run_with_venv.sh seahub.sh start
+ExecStop=bash ${SEAFILE_ROOT}/seafile-server-latest/seahub.sh stop
+User=${SEAFILE_USER}
+Group=${SEAFILE_USER}
+
+[Install]
+WantedBy=multi-user.target
+EOF_SEAHUB
+systemctl daemon-reload
+msg_ok "Created systemd services"
+
+msg_info "Starting Seafile services"
+systemctl enable -q --now seafile.service
+sudo -u ${SEAFILE_USER} bash -lc "cd ${SEAFILE_ROOT}/seafile-server-latest && yes | bash ./seahub.sh start"
+systemctl enable -q seahub.service
+msg_ok "Started Seafile services"
+
+msg_info "Creating credentials file"
+cat <<CREDS_EOF > /root/seafile.creds
+Seafile URL: http://${SEAFILE_SERVER_HOSTNAME}
 Seafile Admin Email: ${SEAFILE_ADMIN_EMAIL}
-Seafile Admin Password: ${SEAFILE_ADMIN_PASS}
-MariaDB Root Password: ${MYSQL_ROOT_PASS}
-Seafile Database User: ${SEAFILE_DB_USER}
-Seafile Database Password: ${SEAFILE_DB_PASS}
-Data Directory: ${SEAFILE_DATA_DIR}
-Database Directory: ${SEAFILE_DB_DIR}
+Seafile Admin Password: ${SEAFILE_ADMIN_PASSWORD}
+Seafile DB Password: ${SEAFILE_DB_PASS}
+Tarball URL: ${SEAFILE_TARBALL_URL}
 CREDS_EOF
-chmod 600 ~/seafile.creds
+chmod 600 /root/seafile.creds
 msg_ok "Created credentials file"
-
-msg_info "Creating Docker Compose stack"
-cat <<COMPOSE_EOF > ${SEAFILE_DIR}/docker-compose.yml
-services:
-  db:
-    image: mariadb:11.4
-    container_name: seafile-db
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASS}
-      MYSQL_LOG_CONSOLE: "true"
-      MARIADB_AUTO_UPGRADE: "1"
-    volumes:
-      - ${SEAFILE_DB_DIR}:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASS}"]
-      interval: 20s
-      timeout: 5s
-      retries: 10
-
-  seafile:
-    image: seafileltd/seafile-mc:latest
-    container_name: seafile
-    restart: unless-stopped
-    ports:
-      - "80:80"
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      DB_HOST: db
-      DB_ROOT_PASSWD: ${MYSQL_ROOT_PASS}
-      TIME_ZONE: Europe/Paris
-      SEAFILE_ADMIN_EMAIL: ${SEAFILE_ADMIN_EMAIL}
-      SEAFILE_ADMIN_PASSWORD: ${SEAFILE_ADMIN_PASS}
-      SEAFILE_SERVER_LETSENCRYPT: "false"
-      SEAFILE_SERVER_HOSTNAME: ${SEAFILE_SERVER_HOSTNAME}
-      SEAFILE_SERVER_PROTOCOL: ${SEAFILE_SERVER_PROTOCOL}
-      INIT_SEAFILE_MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASS}
-      SEAFILE_MYSQL_DB_CCNET_DB_NAME: ccnet_db
-      SEAFILE_MYSQL_DB_SEAFILE_DB_NAME: seafile_db
-      SEAFILE_MYSQL_DB_SEAHUB_DB_NAME: seahub_db
-      SEAFILE_MYSQL_DB_USER: ${SEAFILE_DB_USER}
-      SEAFILE_MYSQL_DB_PASSWORD: ${SEAFILE_DB_PASS}
-    volumes:
-      - ${SEAFILE_DATA_DIR}:/shared
-COMPOSE_EOF
-msg_ok "Created Docker Compose stack"
-
-msg_info "Starting Seafile stack"
-cd ${SEAFILE_DIR}
-$STD docker compose up -d
-msg_ok "Started Seafile stack"
 
 motd_ssh
 customize
