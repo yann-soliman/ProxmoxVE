@@ -180,20 +180,22 @@ export PYTHONUNBUFFERED=1
 EOF_SETUP
 chown ${SEAFILE_USER}:${SEAFILE_USER} ${SEAFILE_SETUP_ENV}
 chmod 600 ${SEAFILE_SETUP_ENV}
-cat <<SETUP_INPUT | sudo -u ${SEAFILE_USER} bash -lc "source ${SEAFILE_SETUP_ENV}; source ${SEAFILE_ROOT}/python-venv/bin/activate; cd ${SEAFILE_INSTALL_DIR}; ./setup-seafile-mysql.sh"
+cat <<SETUP_INPUT > /tmp/seafile-setup-input.txt
 
 ${SEAFILE_SERVER_NAME}
 ${SEAFILE_SERVER_HOSTNAME}
 ${SEAFILE_FILESERVER_PORT}
-2
-localhost
-3306
-seafile
+1
+
 ${SEAFILE_DB_PASS}
+
 ccnet_db
 seafile_db
 seahub_db
 SETUP_INPUT
+chmod 600 /tmp/seafile-setup-input.txt
+log_msg "Seafile debug: setup input prepared at /tmp/seafile-setup-input.txt"
+sudo -u ${SEAFILE_USER} bash -lc "source ${SEAFILE_SETUP_ENV}; source ${SEAFILE_ROOT}/python-venv/bin/activate; cd ${SEAFILE_INSTALL_DIR}; script -q -e -c './setup-seafile-mysql.sh' /dev/null </tmp/seafile-setup-input.txt"
 msg_ok "Ran Seafile setup"
 
 msg_info "Creating Seafile environment file"
