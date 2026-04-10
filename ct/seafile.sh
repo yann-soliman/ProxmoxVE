@@ -5,15 +5,23 @@
 # Source: https://manual.seafile.com/latest/setup_binary/installation/
 #
 # Usage for testing on a fork:
-#   SEAFILE_TARBALL_URL='https://example.invalid/seafile-pro-server_x86-64.tar.gz' \
+#   export SEAFILE_ADMIN_EMAIL='user@example.com'
+#   export SEAFILE_TARBALL_URL='https://example.invalid/seafile-pro-server_x86-64.tar.gz'
 #   bash -c "$(curl -fsSL https://raw.githubusercontent.com/yann-soliman/ProxmoxVE/feat/seafile-script/ct/seafile.sh)"
-#
-# The installer requires SEAFILE_TARBALL_URL to be set to a direct archive download URL.
 
 CUSTOM_REPO_OWNER="yann-soliman"
 CUSTOM_REPO_NAME="ProxmoxVE"
 CUSTOM_REPO_BRANCH="feat/seafile-script"
 CUSTOM_REPO="https://raw.githubusercontent.com/${CUSTOM_REPO_OWNER}/${CUSTOM_REPO_NAME}/${CUSTOM_REPO_BRANCH}"
+
+if [[ -z "${SEAFILE_TARBALL_URL:-}" ]]; then
+  echo "[ERROR] SEAFILE_TARBALL_URL is required" >&2
+  exit 1
+fi
+if [[ -z "${SEAFILE_ADMIN_EMAIL:-}" ]]; then
+  echo "[ERROR] SEAFILE_ADMIN_EMAIL is required" >&2
+  exit 1
+fi
 
 export REPO_SOURCE="external"
 source <(curl -fsSL "${CUSTOM_REPO}/misc/build.func")
@@ -32,13 +40,6 @@ header_info "$APP"
 variables
 color
 catch_errors
-
-if [[ -z "${SEAFILE_TARBALL_URL:-}" ]]; then
-  msg_error "SEAFILE_TARBALL_URL is required before launching this script"
-  echo "Example:" >/dev/tty
-  echo "  SEAFILE_TARBALL_URL='https://example.invalid/seafile-pro-server_x86-64.tar.gz' bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/${CUSTOM_REPO_OWNER}/${CUSTOM_REPO_NAME}/${CUSTOM_REPO_BRANCH}/ct/seafile.sh)\"" >/dev/tty
-  exit 1
-fi
 
 function update_script() {
   header_info "$APP"
@@ -99,47 +100,35 @@ function update_script() {
 }
 
 function build_container() {
-  local custom_install_func_url
-  local custom_build_func_url
-  local custom_script_path
+  local custom_install_func_url="${CUSTOM_REPO}/misc/install.func"
+  local custom_install_script_url="${CUSTOM_REPO}/install/${var_install}.sh"
   local temp_build
 
-  custom_install_func_url="${CUSTOM_REPO}/misc/install.func"
-  custom_build_func_url="${CUSTOM_REPO}/misc/build.func"
-  custom_script_path="${CUSTOM_REPO}/install/${var_install}.sh"
-
-  msg_info "Seafile debug: wrapping build_container for fork testing"
-  log_msg "Seafile debug: custom_build_func_url=${custom_build_func_url}"
-  log_msg "Seafile debug: custom_install_func_url=${custom_install_func_url}"
-  log_msg "Seafile debug: custom_script_path=${custom_script_path}"
+  msg_info "Seafile debug: using explicit forked build wrapper"
+  log_msg "Seafile debug: install.func=${custom_install_func_url}"
+  log_msg "Seafile debug: install_script=${custom_install_script_url}"
 
   temp_build=$(mktemp)
-  curl -fsSL "${custom_build_func_url}" >"${temp_build}"
+  curl -fsSL "${CUSTOM_REPO}/misc/build.func" > "${temp_build}"
 
-  python3 - <<'PY' "${temp_build}" "${custom_install_func_url}" "${custom_script_path}"
+  python3 - <<PY "${temp_build}" "${custom_install_func_url}" "${custom_install_script_url}"
 from pathlib import Path
 import sys
 p = Path(sys.argv[1])
-install_url = sys.argv[2]
-script_url = sys.argv[3]
+install_func_url = sys.argv[2]
+install_script_url = sys.argv[3]
 text = p.read_text()
 text = text.replace(
     'export FUNCTIONS_FILE_PATH="$(curl -fsSL "$\\_func_url")"',
-    'export FUNCTIONS_FILE_PATH="$(curl -fsSL \"' + install_url + '\")"\n  log_msg "Seafile debug: FUNCTIONS_FILE_PATH loaded from fork: ' + install_url + '"'
+    'export FUNCTIONS_FILE_PATH="$(curl -fsSL \"' + install_func_url + '\")"\n  log_msg "Seafile debug: loaded install.func from fork"'
 )
 text = text.replace(
     'lxc-attach -n "$CTID" -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/install/${var_install}.sh)"',
-    'log_msg "Seafile debug: running install script from fork: ' + script_url + '"\n    lxc-attach -n "$CTID" -- bash -c "$(curl -fsSL ' + script_url + ')"'
+    'log_msg "Seafile debug: executing install script from fork"\n    lxc-attach -n "$CTID" -- bash -c "$(curl -fsSL ' + install_script_url + ')"'
 )
 p.write_text(text)
 PY
 
-  if [[ ! -s "${temp_build}" ]]; then
-    msg_error "Seafile debug: failed to prepare patched build.func"
-    exit 1
-  fi
-
-  log_msg "Seafile debug: patched build.func stored at ${temp_build}"
   source "${temp_build}"
   header_info "$APP"
   build_container
