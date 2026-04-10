@@ -3,6 +3,12 @@
 # Author: Tiklaw (OpenClaw)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://manual.seafile.com/latest/setup_binary/installation/
+#
+# Usage for testing on a fork:
+#   SEAFILE_TARBALL_URL='https://example.invalid/seafile-pro-server_x86-64.tar.gz' \
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/yann-soliman/ProxmoxVE/feat/seafile-script/ct/seafile.sh)"
+#
+# The installer requires SEAFILE_TARBALL_URL to be set to a direct archive download URL.
 
 CUSTOM_REPO_OWNER="yann-soliman"
 CUSTOM_REPO_NAME="ProxmoxVE"
@@ -26,6 +32,13 @@ header_info "$APP"
 variables
 color
 catch_errors
+
+if [[ -z "${SEAFILE_TARBALL_URL:-}" ]]; then
+  msg_error "SEAFILE_TARBALL_URL is required before launching this script"
+  echo "Example:" >/dev/tty
+  echo "  SEAFILE_TARBALL_URL='https://example.invalid/seafile-pro-server_x86-64.tar.gz' bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/${CUSTOM_REPO_OWNER}/${CUSTOM_REPO_NAME}/${CUSTOM_REPO_BRANCH}/ct/seafile.sh)\"" >/dev/tty
+  exit 1
+fi
 
 function update_script() {
   header_info "$APP"

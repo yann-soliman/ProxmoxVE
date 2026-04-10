@@ -81,21 +81,17 @@ validate_tarball_url_hint() {
   return 0
 }
 
-while true; do
-  if [[ -n "${SEAFILE_TARBALL_URL:-}" ]]; then
-    printf "\nUsing Seafile Pro tarball URL from environment.\n" >/dev/tty
-  else
-    printf "\nSeafile Pro tarball URL (direct archive link)\nPaste the final file URL here, not the Seafile folder/list page.\n> " >/dev/tty
-    read -r SEAFILE_TARBALL_URL </dev/tty
-  fi
+if [[ -z "${SEAFILE_TARBALL_URL:-}" ]]; then
+  msg_error "SEAFILE_TARBALL_URL environment variable is required"
+  echo "Run the CT script like this:" >/dev/tty
+  echo "  SEAFILE_TARBALL_URL='https://example.invalid/seafile-pro-server_x86-64.tar.gz' bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/yann-soliman/ProxmoxVE/feat/seafile-script/ct/seafile.sh)\"" >/dev/tty
+  exit 1
+fi
 
-  if validate_tarball_url_hint "${SEAFILE_TARBALL_URL}"; then
-    break
-  fi
-
-  printf "\nTry again.\n" >/dev/tty
-  unset SEAFILE_TARBALL_URL
-done
+printf "\nUsing Seafile Pro tarball URL from environment.\n" >/dev/tty
+if ! validate_tarball_url_hint "${SEAFILE_TARBALL_URL}"; then
+  exit 1
+fi
 
 SEAFILE_SERVER_NAME=$(prompt_with_default "Seafile server name" "seafile")
 SEAFILE_SERVER_HOSTNAME=$(prompt_with_default "Seafile server hostname or IP" "${LOCAL_IP}")
