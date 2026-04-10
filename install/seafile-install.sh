@@ -180,7 +180,8 @@ export PYTHONUNBUFFERED=1
 EOF_SETUP
 chown ${SEAFILE_USER}:${SEAFILE_USER} ${SEAFILE_SETUP_ENV}
 chmod 600 ${SEAFILE_SETUP_ENV}
-cat <<'SETUP_INPUT' | sudo -u ${SEAFILE_USER} bash -lc "source ${SEAFILE_SETUP_ENV}; source ${SEAFILE_ROOT}/python-venv/bin/activate; cd ${SEAFILE_INSTALL_DIR}; ./setup-seafile-mysql.sh"
+cat <<SETUP_INPUT | sudo -u ${SEAFILE_USER} bash -lc "source ${SEAFILE_SETUP_ENV}; source ${SEAFILE_ROOT}/python-venv/bin/activate; cd ${SEAFILE_INSTALL_DIR}; ./setup-seafile-mysql.sh"
+
 ${SEAFILE_SERVER_NAME}
 ${SEAFILE_SERVER_HOSTNAME}
 ${SEAFILE_FILESERVER_PORT}
