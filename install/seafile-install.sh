@@ -5,15 +5,35 @@
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://manual.seafile.com/latest/setup_binary/installation/
 
-source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
-color
-verb_ip6
-catch_errors
-setting_up_container
-network_check
-update_os
+if [[ -n "${FUNCTIONS_FILE_PATH:-}" && "${FUNCTIONS_FILE_PATH}" != *'$('* ]]; then
+  source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
+else
+  source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/install.func)
+fi
 
-msg_info "Installing Dependencies"
+if declare -F color >/dev/null; then color; fi
+if declare -F verb_ip6 >/dev/null; then verb_ip6; fi
+if declare -F catch_errors >/dev/null; then catch_errors; fi
+if declare -F setting_up_container >/dev/null; then setting_up_container; fi
+if declare -F network_check >/dev/null; then network_check; fi
+if declare -F update_os >/dev/null; then update_os; fi
+
+if ! declare -F msg_info >/dev/null; then msg_info(){ echo "[INFO] $*"; }; fi
+if ! declare -F msg_ok >/dev/null; then msg_ok(){ echo "[OK] $*"; }; fi
+if ! declare -F msg_warn >/dev/null; then msg_warn(){ echo "[WARN] $*"; }; fi
+if ! declare -F msg_error >/dev/null; then msg_error(){ echo "[ERROR] $*"; }; fi
+if ! declare -F get_lxc_ip >/dev/null; then
+  get_lxc_ip(){
+    LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+  }
+fi
+: "${STD:=}"
+
+msg_info "Refreshing APT metadata"
+$STD apt update
+msg_ok "Refreshed APT metadata"
+
+msg_info "Installing dependencies"
 $STD apt install -y \
   mariadb-server \
   redis-server \
@@ -35,71 +55,46 @@ $STD apt install -y \
   libhiredis-dev \
   wget \
   pwgen
-msg_ok "Installed Dependencies"
+msg_ok "Installed dependencies"
 
 SEAFILE_ROOT=/opt/seafile
 SEAFILE_USER=seafile
 SEAFILE_CONF_DIR=${SEAFILE_ROOT}/conf
 SEAFILE_STATE_DIR=/etc/seafile-installer
-SEAFILE_SETUP_ENV=/tmp/seafile-setup.env
+SEAFILE_SETUP_ENV=$(mktemp /tmp/seafile-setup.XXXXXX.env)
+cleanup() {
+  rm -f "${SEAFILE_SETUP_ENV}"
+}
+trap cleanup EXIT
+as_seafile() {
+  runuser -u "${SEAFILE_USER}" -- "$@"
+}
 mkdir -p "${SEAFILE_ROOT}" "${SEAFILE_STATE_DIR}"
 
 get_lxc_ip
 
-msg_info "Collecting Seafile installation parameters"
+SEAFILE_TARBALL_URL="${SEAFILE_TARBALL_URL:-}"
+SEAFILE_SERVER_NAME="${SEAFILE_SERVER_NAME:-seafile}"
+SEAFILE_SERVER_HOSTNAME="${SEAFILE_SERVER_HOSTNAME:-$LOCAL_IP}"
+SEAFILE_FILESERVER_PORT="${SEAFILE_FILESERVER_PORT:-8082}"
+SEAFILE_ADMIN_EMAIL="${SEAFILE_ADMIN_EMAIL:-}"
+SEAFILE_ADMIN_PASSWORD="${SEAFILE_ADMIN_PASSWORD:-$(pwgen -s 20 1)}"
+SEAFILE_DB_PASS="${SEAFILE_DB_PASS:-$(pwgen -s 24 1)}"
+JWT_PRIVATE_KEY="${JWT_PRIVATE_KEY:-$(pwgen -s 40 1)}"
 
-prompt_with_default() {
-  local prompt="$1"
-  local default_value="$2"
-  local result=""
-  printf "\n%s [%s]\n> " "${prompt}" "${default_value}" >/dev/tty
-  read -r result </dev/tty
-  if [[ -z "${result}" ]]; then
-    result="${default_value}"
-  fi
-  printf '%s' "${result}"
-}
-
-validate_tarball_url_hint() {
-  local url="$1"
-
-  if [[ -z "${url}" ]]; then
-    msg_error "A Seafile Pro tarball URL is required"
-    return 1
-  fi
-
-  if [[ "${url}" == *"mode=list"* ]]; then
-    msg_error "The provided URL still points to a Seafile listing page (mode=list), not a direct file"
-    echo "Open the file entry in Seafile and copy the final direct download URL, not the folder/listing URL." >/dev/tty
-    return 1
-  fi
-
-  if [[ ! "${url}" =~ \.(tar\.gz|tgz|tar\.xz|zip)(\?.*)?$ ]]; then
-    msg_warn "The URL does not look like a direct archive link. I will still test it after download."
-  fi
-
-  return 0
-}
-
-if [[ -z "${SEAFILE_TARBALL_URL:-}" ]]; then
+if [[ -z "${SEAFILE_TARBALL_URL}" ]]; then
   msg_error "SEAFILE_TARBALL_URL environment variable is required"
-  echo "Run the CT script like this:" >/dev/tty
-  echo "  SEAFILE_TARBALL_URL='https://example.invalid/seafile-pro-server_x86-64.tar.gz' bash -c \"\$(curl -fsSL https://raw.githubusercontent.com/yann-soliman/ProxmoxVE/feat/seafile-script/ct/seafile.sh)\"" >/dev/tty
+  exit 1
+fi
+if [[ -z "${SEAFILE_ADMIN_EMAIL}" ]]; then
+  msg_error "SEAFILE_ADMIN_EMAIL environment variable is required"
   exit 1
 fi
 
-printf "\nUsing Seafile Pro tarball URL from environment.\n" >/dev/tty
-if ! validate_tarball_url_hint "${SEAFILE_TARBALL_URL}"; then
-  exit 1
-fi
-
-SEAFILE_SERVER_NAME=$(prompt_with_default "Seafile server name" "seafile")
-SEAFILE_SERVER_HOSTNAME=$(prompt_with_default "Seafile server hostname or IP" "${LOCAL_IP}")
-SEAFILE_FILESERVER_PORT=$(prompt_with_default "Fileserver port" "8082")
-SEAFILE_ADMIN_EMAIL=$(prompt_with_default "Admin email" "admin@local.invalid")
-SEAFILE_ADMIN_PASSWORD=$(pwgen -s 20 1)
-SEAFILE_DB_PASS=$(pwgen -s 24 1)
-JWT_PRIVATE_KEY=$(pwgen -s 40 1)
+msg_info "Using Seafile installation parameters"
+msg_ok "Tarball URL provided"
+msg_ok "Server hostname: ${SEAFILE_SERVER_HOSTNAME}"
+msg_ok "Admin email: ${SEAFILE_ADMIN_EMAIL}"
 
 msg_info "Persisting installer state"
 cat <<STATE_EOF > ${SEAFILE_STATE_DIR}/seafile-installer.conf
@@ -135,69 +130,52 @@ fi
 chown -R ${SEAFILE_USER}:${SEAFILE_USER} ${SEAFILE_ROOT}
 
 msg_info "Setting up Python virtual environment"
-sudo -u ${SEAFILE_USER} python3 -m venv ${SEAFILE_ROOT}/python-venv
-sudo -u ${SEAFILE_USER} bash -lc "source ${SEAFILE_ROOT}/python-venv/bin/activate && pip3 install --timeout=3600 boto3 oss2 twilio configparser pytz sqlalchemy==2.0.* pymysql==1.1.* jinja2 django-pylibmc pylibmc redis django-redis psd-tools lxml django==5.2.* cffi==1.17.1 future==1.0.* mysqlclient==2.2.* captcha==0.7.* django_simple_captcha==0.6.* pyjwt==2.10.* djangosaml2==1.11.* pysaml2==7.5.* pycryptodome==3.23.* python-ldap==3.4.* pillow==11.3.* pillow-heif==1.0.* cairosvg==2.8.* scikit-learn==1.7.*"
+as_seafile python3 -m venv ${SEAFILE_ROOT}/python-venv
+runuser -u ${SEAFILE_USER} -- bash -lc "source ${SEAFILE_ROOT}/python-venv/bin/activate && pip3 install --timeout=3600 boto3 oss2 twilio configparser pytz sqlalchemy==2.0.* pymysql==1.1.* jinja2 django-pylibmc pylibmc redis django-redis psd-tools lxml django==5.2.* cffi==1.17.1 future==1.0.* mysqlclient==2.2.* captcha==0.7.* django_simple_captcha==0.6.* pyjwt==2.10.* djangosaml2==1.11.* pysaml2==7.5.* pycryptodome==3.23.* python-ldap==3.4.* pillow==11.3.* pillow-heif==1.0.* cairosvg==2.8.* scikit-learn==1.7.*"
 msg_ok "Set up Python virtual environment"
 
-msg_info "Downloading Seafile Pro tarball"
+msg_info "Downloading Seafile tarball"
 TARBALL_NAME=$(basename "${SEAFILE_TARBALL_URL%%\?*}")
-[[ -z "${TARBALL_NAME}" || "${TARBALL_NAME}" == "download" ]] && TARBALL_NAME="seafile-pro-download"
 TARBALL_PATH=${SEAFILE_ROOT}/${TARBALL_NAME}
-sudo -u ${SEAFILE_USER} wget --content-disposition -O "${TARBALL_PATH}" "${SEAFILE_TARBALL_URL}"
-msg_ok "Downloaded Seafile Pro tarball"
-
-msg_info "Validating downloaded Seafile archive"
-FILE_TYPE=$(file -b "${TARBALL_PATH}" || true)
-log_msg "Seafile debug: downloaded file type: ${FILE_TYPE}"
-if grep -qiE 'HTML document|XML document|ASCII text|Unicode text|JSON text' <<<"${FILE_TYPE}"; then
-  msg_error "Downloaded file is not a tarball archive, it looks like: ${FILE_TYPE}"
-  echo "The provided URL did not return a Seafile archive. It likely points to a web page, not a direct file download." >/dev/tty
+as_seafile wget -O "${TARBALL_PATH}" "${SEAFILE_TARBALL_URL}"
+if ! tar -tf "${TARBALL_PATH}" >/dev/null 2>&1; then
+  msg_error "Downloaded tarball is not a valid archive"
   exit 1
 fi
+msg_ok "Downloaded Seafile tarball"
 
-if ! tar -tf "${TARBALL_PATH}" >/tmp/seafile-tar-list.txt 2>/dev/null; then
-  msg_error "Downloaded file is not a valid tar archive"
-  echo "The provided URL did not return a valid Seafile tarball. Please use a direct archive download URL." >/dev/tty
-  exit 1
-fi
-SEAFILE_EXTRACTED_DIR=$(head -n1 /tmp/seafile-tar-list.txt | cut -d/ -f1)
+msg_info "Extracting Seafile tarball"
+as_seafile tar -C "${SEAFILE_ROOT}" -xf "${TARBALL_PATH}"
+SEAFILE_EXTRACTED_DIR=$(tar -tf "${TARBALL_PATH}" | sed -n '1s#/.*##p')
 if [[ -z "${SEAFILE_EXTRACTED_DIR}" ]]; then
-  msg_error "Unable to determine extracted Seafile directory from archive"
+  msg_error "Unable to determine extracted Seafile directory"
   exit 1
 fi
-msg_ok "Validated downloaded Seafile archive"
-
-msg_info "Extracting Seafile Pro tarball"
-sudo -u ${SEAFILE_USER} tar -C ${SEAFILE_ROOT} -xf "${TARBALL_PATH}"
-SEAFILE_INSTALL_DIR=${SEAFILE_ROOT}/${SEAFILE_EXTRACTED_DIR}
-ln -sfn ${SEAFILE_INSTALL_DIR} ${SEAFILE_ROOT}/seafile-server-latest
-msg_ok "Extracted Seafile Pro tarball"
+SEAFILE_INSTALL_DIR="${SEAFILE_ROOT}/${SEAFILE_EXTRACTED_DIR}"
+msg_ok "Extracted Seafile tarball"
 
 msg_info "Running Seafile setup"
 cat <<EOF_SETUP > ${SEAFILE_SETUP_ENV}
 export LC_ALL=C
 export PYTHONUNBUFFERED=1
+export SEAFILE_SERVER_NAME='${SEAFILE_SERVER_NAME}'
+export SEAFILE_SERVER_HOSTNAME='${SEAFILE_SERVER_HOSTNAME}'
+export SEAFILE_FILESERVER_PORT='${SEAFILE_FILESERVER_PORT}'
+export SEAFILE_DB_PASS='${SEAFILE_DB_PASS}'
+export SEAFILE_ADMIN_EMAIL='${SEAFILE_ADMIN_EMAIL}'
+export SEAFILE_ADMIN_PASSWORD='${SEAFILE_ADMIN_PASSWORD}'
 EOF_SETUP
 chown ${SEAFILE_USER}:${SEAFILE_USER} ${SEAFILE_SETUP_ENV}
 chmod 600 ${SEAFILE_SETUP_ENV}
-cat <<SETUP_INPUT > /tmp/seafile-setup-input.txt
-
-${SEAFILE_SERVER_NAME}
-${SEAFILE_SERVER_HOSTNAME}
-${SEAFILE_FILESERVER_PORT}
-2
-localhost
-3306
-seafile
-${SEAFILE_DB_PASS}
-ccnet_db
-seafile_db
-seahub_db
-SETUP_INPUT
-chown ${SEAFILE_USER}:${SEAFILE_USER} /tmp/seafile-setup-input.txt
-chmod 600 /tmp/seafile-setup-input.txt
-log_msg "Seafile debug: setup input prepared at /tmp/seafile-setup-input.txt"
-sudo -u ${SEAFILE_USER} bash -lc "source ${SEAFILE_SETUP_ENV}; source ${SEAFILE_ROOT}/python-venv/bin/activate; cd ${SEAFILE_INSTALL_DIR}; script -q -e -c './setup-seafile-mysql.sh' /dev/null </tmp/seafile-setup-input.txt"
+runuser -u ${SEAFILE_USER} -- bash -lc "source ${SEAFILE_SETUP_ENV}; source ${SEAFILE_ROOT}/python-venv/bin/activate; cd ${SEAFILE_INSTALL_DIR}; printf '\n%s\n%s\n\n%s\n2\n127.0.0.1\n3306\nseafile\n%s\nccnet_db\nseafile_db\nseahub_db\n\n' \"\${SEAFILE_SERVER_NAME}\" \"\${SEAFILE_SERVER_HOSTNAME}\" \"\${SEAFILE_FILESERVER_PORT}\" \"\${SEAFILE_DB_PASS}\" | ./setup-seafile-mysql.sh"
+if [[ ! -L "${SEAFILE_ROOT}/seafile-server-latest" ]]; then
+  msg_error "Seafile setup did not complete successfully; seafile-server-latest symlink is missing"
+  exit 1
+fi
+if [[ ! -f "${SEAFILE_ROOT}/seafile-server-latest/seafile.sh" ]]; then
+  msg_error "Seafile setup did not complete successfully; seafile-server-latest/seafile.sh is missing"
+  exit 1
+fi
 msg_ok "Ran Seafile setup"
 
 msg_info "Creating Seafile environment file"
@@ -206,7 +184,7 @@ cat <<ENV_EOF > ${SEAFILE_CONF_DIR}/.env
 JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY}
 SEAFILE_SERVER_PROTOCOL=http
 SEAFILE_SERVER_HOSTNAME=${SEAFILE_SERVER_HOSTNAME}
-SEAFILE_MYSQL_DB_HOST=localhost
+SEAFILE_MYSQL_DB_HOST=127.0.0.1
 SEAFILE_MYSQL_DB_PORT=3306
 SEAFILE_MYSQL_DB_USER=seafile
 SEAFILE_MYSQL_DB_PASSWORD=${SEAFILE_DB_PASS}
@@ -273,13 +251,42 @@ msg_ok "Created systemd services"
 
 msg_info "Starting Seafile services"
 systemctl enable -q --now seafile.service
-sudo -u ${SEAFILE_USER} bash -lc "cd ${SEAFILE_ROOT}/seafile-server-latest && yes | bash ./seahub.sh start"
 systemctl enable -q seahub.service
+if ! systemctl start seahub.service; then
+  runuser -u ${SEAFILE_USER} -- bash -lc "cd ${SEAFILE_ROOT}/seafile-server-latest && yes | bash ./seahub.sh start"
+fi
+sleep 5
+if ! systemctl is-active --quiet seafile.service; then
+  msg_error "seafile.service is not active after startup"
+  systemctl --no-pager --full status seafile.service || true
+  exit 1
+fi
+if ! systemctl is-active --quiet seahub.service; then
+  msg_error "seahub.service is not active after startup"
+  systemctl --no-pager --full status seahub.service || true
+  exit 1
+fi
 msg_ok "Started Seafile services"
+
+msg_info "Checking Seafile HTTP endpoints"
+SEAHUB_HTTP_URL="http://${SEAFILE_SERVER_HOSTNAME}:8000"
+FILESERVER_HTTP_URL="http://${SEAFILE_SERVER_HOSTNAME}:${SEAFILE_FILESERVER_PORT}"
+sed -i 's#^bind = ".*"#bind = "0.0.0.0:8000"#' ${SEAFILE_CONF_DIR}/gunicorn.conf.py
+if curl -fsSI "${SEAHUB_HTTP_URL}" >/dev/null 2>&1; then
+  msg_ok "Seahub HTTP endpoint is reachable on ${SEAHUB_HTTP_URL}"
+else
+  msg_warn "Seahub HTTP endpoint did not answer yet on ${SEAHUB_HTTP_URL}"
+fi
+if curl -fsSI "${FILESERVER_HTTP_URL}" >/dev/null 2>&1; then
+  msg_ok "Seafile fileserver endpoint is reachable on ${FILESERVER_HTTP_URL}"
+else
+  msg_warn "Seafile fileserver endpoint did not answer yet on ${FILESERVER_HTTP_URL}"
+fi
 
 msg_info "Creating credentials file"
 cat <<CREDS_EOF > /root/seafile.creds
-Seafile URL: http://${SEAFILE_SERVER_HOSTNAME}
+Seahub URL: http://${SEAFILE_SERVER_HOSTNAME}:8000
+Seafile Fileserver URL: http://${SEAFILE_SERVER_HOSTNAME}:${SEAFILE_FILESERVER_PORT}
 Seafile Admin Email: ${SEAFILE_ADMIN_EMAIL}
 Seafile Admin Password: ${SEAFILE_ADMIN_PASSWORD}
 Seafile DB Password: ${SEAFILE_DB_PASS}
@@ -288,6 +295,6 @@ CREDS_EOF
 chmod 600 /root/seafile.creds
 msg_ok "Created credentials file"
 
-motd_ssh
-customize
-cleanup_lxc
+if declare -F motd_ssh >/dev/null; then motd_ssh; fi
+if declare -F customize >/dev/null; then customize; fi
+if declare -F cleanup_lxc >/dev/null; then cleanup_lxc; fi
