@@ -193,6 +193,7 @@ ccnet_db
 seafile_db
 seahub_db
 SETUP_INPUT
+chown ${SEAFILE_USER}:${SEAFILE_USER} /tmp/seafile-setup-input.txt
 chmod 600 /tmp/seafile-setup-input.txt
 log_msg "Seafile debug: setup input prepared at /tmp/seafile-setup-input.txt"
 sudo -u ${SEAFILE_USER} bash -lc "source ${SEAFILE_SETUP_ENV}; source ${SEAFILE_ROOT}/python-venv/bin/activate; cd ${SEAFILE_INSTALL_DIR}; script -q -e -c './setup-seafile-mysql.sh' /dev/null </tmp/seafile-setup-input.txt"
