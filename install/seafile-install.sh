@@ -185,9 +185,11 @@ cat <<SETUP_INPUT > /tmp/seafile-setup-input.txt
 ${SEAFILE_SERVER_NAME}
 ${SEAFILE_SERVER_HOSTNAME}
 ${SEAFILE_FILESERVER_PORT}
-1
-
-
+2
+localhost
+3306
+seafile
+${SEAFILE_DB_PASS}
 ccnet_db
 seafile_db
 seahub_db
