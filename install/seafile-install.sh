@@ -174,10 +174,9 @@ export SEAFILE_ADMIN_PASSWORD='${SEAFILE_ADMIN_PASSWORD}'
 EOF_SETUP
 chown ${SEAFILE_USER}:${SEAFILE_USER} ${SEAFILE_SETUP_ENV}
 chmod 600 ${SEAFILE_SETUP_ENV}
-runuser -u ${SEAFILE_USER} -- bash -lc "source ${SEAFILE_SETUP_ENV}; source ${SEAFILE_ROOT}/python-venv/bin/activate; cd ${SEAFILE_INSTALL_DIR}; printf '\n%s\n%s\n\n%s\n2\n127.0.0.1\n3306\nseafile\n%s\nccnet_db\nseafile_db\nseahub_db\n' \"\${SEAFILE_SERVER_NAME}\" \"\${SEAFILE_SERVER_HOSTNAME}\" \"\${SEAFILE_FILESERVER_PORT}\" \"\${SEAFILE_DB_PASS}\" | ./setup-seafile-mysql.sh"
+runuser -u ${SEAFILE_USER} -- bash -lc "source ${SEAFILE_SETUP_ENV}; source ${SEAFILE_ROOT}/python-venv/bin/activate; cd ${SEAFILE_INSTALL_DIR}; ./setup-seafile-mysql.py auto -n \"\${SEAFILE_SERVER_NAME}\" -i \"\${SEAFILE_SERVER_HOSTNAME}\" -p \"\${SEAFILE_FILESERVER_PORT}\" -e 1 -o 127.0.0.1 -t 3306 -u seafile -w \"\${SEAFILE_DB_PASS}\" -c ccnet_db -s seafile_db -b seahub_db"
 if [[ ! -L "${SEAFILE_ROOT}/seafile-server-latest" ]]; then
-  msg_error "Seafile setup did not complete successfully; seafile-server-latest symlink is missing"
-  exit 1
+  ln -sfn "${SEAFILE_INSTALL_DIR}" "${SEAFILE_ROOT}/seafile-server-latest"
 fi
 if [[ ! -f "${SEAFILE_ROOT}/seafile-server-latest/seafile.sh" ]]; then
   msg_error "Seafile setup did not complete successfully; seafile-server-latest/seafile.sh is missing"
