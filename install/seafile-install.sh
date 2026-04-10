@@ -122,6 +122,13 @@ FLUSH PRIVILEGES;
 SQL
 msg_ok "Prepared MariaDB and Redis"
 
+msg_info "Verifying Seafile MariaDB credentials"
+if ! mariadb -h 127.0.0.1 -u seafile -p"${SEAFILE_DB_PASS}" -e "SELECT 1" >/dev/null 2>&1; then
+  msg_error "Unable to authenticate to MariaDB with user seafile on 127.0.0.1"
+  exit 1
+fi
+msg_ok "Verified Seafile MariaDB credentials"
+
 if ! id -u ${SEAFILE_USER} >/dev/null 2>&1; then
   msg_info "Creating seafile user"
   /usr/sbin/adduser --disabled-password --gecos "" ${SEAFILE_USER}
@@ -167,7 +174,7 @@ export SEAFILE_ADMIN_PASSWORD='${SEAFILE_ADMIN_PASSWORD}'
 EOF_SETUP
 chown ${SEAFILE_USER}:${SEAFILE_USER} ${SEAFILE_SETUP_ENV}
 chmod 600 ${SEAFILE_SETUP_ENV}
-runuser -u ${SEAFILE_USER} -- bash -lc "source ${SEAFILE_SETUP_ENV}; source ${SEAFILE_ROOT}/python-venv/bin/activate; cd ${SEAFILE_INSTALL_DIR}; printf '\n%s\n%s\n\n%s\n2\n127.0.0.1\n3306\nseafile\n%s\nccnet_db\nseafile_db\nseahub_db\n\n' \"\${SEAFILE_SERVER_NAME}\" \"\${SEAFILE_SERVER_HOSTNAME}\" \"\${SEAFILE_FILESERVER_PORT}\" \"\${SEAFILE_DB_PASS}\" | ./setup-seafile-mysql.sh"
+runuser -u ${SEAFILE_USER} -- bash -lc "source ${SEAFILE_SETUP_ENV}; source ${SEAFILE_ROOT}/python-venv/bin/activate; cd ${SEAFILE_INSTALL_DIR}; printf '\n%s\n%s\n\n%s\n2\n127.0.0.1\n3306\nseafile\n%s\nccnet_db\nseafile_db\nseahub_db\n' \"\${SEAFILE_SERVER_NAME}\" \"\${SEAFILE_SERVER_HOSTNAME}\" \"\${SEAFILE_FILESERVER_PORT}\" \"\${SEAFILE_DB_PASS}\" | ./setup-seafile-mysql.sh"
 if [[ ! -L "${SEAFILE_ROOT}/seafile-server-latest" ]]; then
   msg_error "Seafile setup did not complete successfully; seafile-server-latest symlink is missing"
   exit 1
