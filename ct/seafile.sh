@@ -20,10 +20,10 @@ var_disk="${var_disk:-20}"
 var_os="${var_os:-debian}"
 var_version="${var_version:-13}"
 var_unprivileged="${var_unprivileged:-1}"
+var_install="seafile-install"
 
 header_info "$APP"
 variables
-var_install="seafile-install"
 color
 catch_errors
 
@@ -87,17 +87,49 @@ function update_script() {
 
 function build_container() {
   local custom_install_func_url
+  local custom_build_func_url
+  local custom_script_path
+  local temp_build
 
   custom_install_func_url="${CUSTOM_REPO}/misc/install.func"
+  custom_build_func_url="${CUSTOM_REPO}/misc/build.func"
+  custom_script_path="${CUSTOM_REPO}/install/${var_install}.sh"
 
-  export FUNCTIONS_FILE_PATH="$(curl -fsSL "${custom_install_func_url}")"
-  if [[ -z "$FUNCTIONS_FILE_PATH" || ${#FUNCTIONS_FILE_PATH} -lt 100 ]]; then
-    msg_error "Unable to load install.func from custom repo: ${custom_install_func_url}"
+  msg_info "Seafile debug: wrapping build_container for fork testing"
+  log_msg "Seafile debug: custom_build_func_url=${custom_build_func_url}"
+  log_msg "Seafile debug: custom_install_func_url=${custom_install_func_url}"
+  log_msg "Seafile debug: custom_script_path=${custom_script_path}"
+
+  temp_build=$(mktemp)
+  curl -fsSL "${custom_build_func_url}" >"${temp_build}"
+
+  python3 - <<'PY' "${temp_build}" "${custom_install_func_url}" "${custom_script_path}"
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+install_url = sys.argv[2]
+script_url = sys.argv[3]
+text = p.read_text()
+text = text.replace(
+    'export FUNCTIONS_FILE_PATH="$(curl -fsSL "$\\_func_url")"',
+    'export FUNCTIONS_FILE_PATH="$(curl -fsSL \"' + install_url + '\")"\n  log_msg "Seafile debug: FUNCTIONS_FILE_PATH loaded from fork: ' + install_url + '"'
+)
+text = text.replace(
+    'lxc-attach -n "$CTID" -- bash -c "$(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/install/${var_install}.sh)"',
+    'log_msg "Seafile debug: running install script from fork: ' + script_url + '"\n    lxc-attach -n "$CTID" -- bash -c "$(curl -fsSL ' + script_url + ')"'
+)
+p.write_text(text)
+PY
+
+  if [[ ! -s "${temp_build}" ]]; then
+    msg_error "Seafile debug: failed to prepare patched build.func"
     exit 1
   fi
 
+  log_msg "Seafile debug: patched build.func stored at ${temp_build}"
+  source "${temp_build}"
   header_info "$APP"
-  create_lxc
+  build_container
 }
 
 start
