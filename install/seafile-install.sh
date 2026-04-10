@@ -47,19 +47,57 @@ mkdir -p "${SEAFILE_ROOT}" "${SEAFILE_STATE_DIR}"
 get_lxc_ip
 
 msg_info "Collecting Seafile installation parameters"
-read -r -p "Seafile Pro tarball URL: " SEAFILE_TARBALL_URL
-if [[ -z "${SEAFILE_TARBALL_URL}" ]]; then
-  msg_error "A Seafile Pro tarball URL is required"
-  exit 1
-fi
-read -r -p "Seafile server name [seafile]: " SEAFILE_SERVER_NAME
-SEAFILE_SERVER_NAME=${SEAFILE_SERVER_NAME:-seafile}
-read -r -p "Seafile server hostname or IP [${LOCAL_IP}]: " SEAFILE_SERVER_HOSTNAME
-SEAFILE_SERVER_HOSTNAME=${SEAFILE_SERVER_HOSTNAME:-$LOCAL_IP}
-read -r -p "Fileserver port [8082]: " SEAFILE_FILESERVER_PORT
-SEAFILE_FILESERVER_PORT=${SEAFILE_FILESERVER_PORT:-8082}
-read -r -p "Admin email [admin@local.invalid]: " SEAFILE_ADMIN_EMAIL
-SEAFILE_ADMIN_EMAIL=${SEAFILE_ADMIN_EMAIL:-admin@local.invalid}
+
+prompt_with_default() {
+  local prompt="$1"
+  local default_value="$2"
+  local result=""
+  read -r -e -p "${prompt} [${default_value}]: " result </dev/tty
+  if [[ -z "${result}" ]]; then
+    result="${default_value}"
+  fi
+  printf '%s' "${result}"
+}
+
+validate_tarball_url_hint() {
+  local url="$1"
+
+  if [[ -z "${url}" ]]; then
+    msg_error "A Seafile Pro tarball URL is required"
+    return 1
+  fi
+
+  if [[ "${url}" == *"mode=list"* ]] || [[ "${url}" == *"/d/"*"?p="* ]]; then
+    msg_error "The provided URL looks like a Seafile library listing page, not a direct tarball download link"
+    echo "Provide the direct URL of the Seafile Pro archive file (.tar.gz, .tgz, .tar.xz, .zip), not the sharing page URL." >/dev/tty
+    return 1
+  fi
+
+  if [[ ! "${url}" =~ \.(tar\.gz|tgz|tar\.xz|zip)(\?.*)?$ ]]; then
+    msg_warn "The URL does not look like a direct archive link. I will still test it after download."
+  fi
+
+  return 0
+}
+
+while true; do
+  if [[ -n "${SEAFILE_TARBALL_URL:-}" ]]; then
+    printf 'Using Seafile Pro tarball URL from environment.\n' >/dev/tty
+  else
+    read -r -e -p "Seafile Pro tarball URL (direct archive link): " SEAFILE_TARBALL_URL </dev/tty
+  fi
+
+  if validate_tarball_url_hint "${SEAFILE_TARBALL_URL}"; then
+    break
+  fi
+
+  unset SEAFILE_TARBALL_URL
+done
+
+SEAFILE_SERVER_NAME=$(prompt_with_default "Seafile server name" "seafile")
+SEAFILE_SERVER_HOSTNAME=$(prompt_with_default "Seafile server hostname or IP" "${LOCAL_IP}")
+SEAFILE_FILESERVER_PORT=$(prompt_with_default "Fileserver port" "8082")
+SEAFILE_ADMIN_EMAIL=$(prompt_with_default "Admin email" "admin@local.invalid")
 SEAFILE_ADMIN_PASSWORD=$(pwgen -s 20 1)
 SEAFILE_DB_PASS=$(pwgen -s 24 1)
 JWT_PRIVATE_KEY=$(pwgen -s 40 1)
@@ -104,17 +142,34 @@ msg_ok "Set up Python virtual environment"
 
 msg_info "Downloading Seafile Pro tarball"
 TARBALL_NAME=$(basename "${SEAFILE_TARBALL_URL%%\?*}")
+[[ -z "${TARBALL_NAME}" || "${TARBALL_NAME}" == "download" ]] && TARBALL_NAME="seafile-pro-download"
 TARBALL_PATH=${SEAFILE_ROOT}/${TARBALL_NAME}
-sudo -u ${SEAFILE_USER} wget -O "${TARBALL_PATH}" "${SEAFILE_TARBALL_URL}"
+sudo -u ${SEAFILE_USER} wget --content-disposition -O "${TARBALL_PATH}" "${SEAFILE_TARBALL_URL}"
 msg_ok "Downloaded Seafile Pro tarball"
+
+msg_info "Validating downloaded Seafile archive"
+FILE_TYPE=$(file -b "${TARBALL_PATH}" || true)
+log_msg "Seafile debug: downloaded file type: ${FILE_TYPE}"
+if grep -qiE 'HTML document|XML document|ASCII text|Unicode text|JSON text' <<<"${FILE_TYPE}"; then
+  msg_error "Downloaded file is not a tarball archive, it looks like: ${FILE_TYPE}"
+  echo "The provided URL did not return a Seafile archive. It likely points to a web page, not a direct file download." >/dev/tty
+  exit 1
+fi
+
+if ! tar -tf "${TARBALL_PATH}" >/tmp/seafile-tar-list.txt 2>/dev/null; then
+  msg_error "Downloaded file is not a valid tar archive"
+  echo "The provided URL did not return a valid Seafile tarball. Please use a direct archive download URL." >/dev/tty
+  exit 1
+fi
+SEAFILE_EXTRACTED_DIR=$(head -n1 /tmp/seafile-tar-list.txt | cut -d/ -f1)
+if [[ -z "${SEAFILE_EXTRACTED_DIR}" ]]; then
+  msg_error "Unable to determine extracted Seafile directory from archive"
+  exit 1
+fi
+msg_ok "Validated downloaded Seafile archive"
 
 msg_info "Extracting Seafile Pro tarball"
 sudo -u ${SEAFILE_USER} tar -C ${SEAFILE_ROOT} -xf "${TARBALL_PATH}"
-SEAFILE_EXTRACTED_DIR=$(tar -tf "${TARBALL_PATH}" | head -n1 | cut -d/ -f1)
-if [[ -z "${SEAFILE_EXTRACTED_DIR}" ]]; then
-  msg_error "Unable to determine extracted Seafile directory"
-  exit 1
-fi
 SEAFILE_INSTALL_DIR=${SEAFILE_ROOT}/${SEAFILE_EXTRACTED_DIR}
 ln -sfn ${SEAFILE_INSTALL_DIR} ${SEAFILE_ROOT}/seafile-server-latest
 msg_ok "Extracted Seafile Pro tarball"
