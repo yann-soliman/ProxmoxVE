@@ -4,6 +4,7 @@
 # Author: Tiklaw (OpenClaw)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://manual.seafile.com/latest/setup_binary/installation/
+# Script revision: 113f9a0df+
 
 if [[ -n "${FUNCTIONS_FILE_PATH:-}" && "${FUNCTIONS_FILE_PATH}" != *'$('* ]]; then
   source /dev/stdin <<<"$FUNCTIONS_FILE_PATH"
@@ -29,6 +30,7 @@ if ! declare -F get_lxc_ip >/dev/null; then
 fi
 : "${STD:=}"
 
+msg_info "Seafile installer revision: 113f9a0df+"
 msg_info "Refreshing APT metadata"
 $STD apt update
 msg_ok "Refreshed APT metadata"
