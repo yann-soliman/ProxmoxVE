@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-source <(curl -fsSL https://raw.githubusercontent.com/community-scripts/ProxmoxVE/main/misc/build.func)
 # Copyright (c) 2021-2026 community-scripts ORG
 # Author: Tiklaw (OpenClaw)
 # License: MIT | https://github.com/community-scripts/ProxmoxVE/raw/main/LICENSE
 # Source: https://manual.seafile.com/latest/setup_binary/installation/
+
+CUSTOM_REPO_OWNER="yann-soliman"
+CUSTOM_REPO_NAME="ProxmoxVE"
+CUSTOM_REPO_BRANCH="feat/seafile-script"
+CUSTOM_REPO="https://raw.githubusercontent.com/${CUSTOM_REPO_OWNER}/${CUSTOM_REPO_NAME}/${CUSTOM_REPO_BRANCH}"
+
+export REPO_SOURCE="external"
+source <(curl -fsSL "${CUSTOM_REPO}/misc/build.func")
 
 APP="Seafile"
 var_tags="${var_tags:-cloud;files}"
@@ -78,24 +85,28 @@ function update_script() {
   exit
 }
 
-CUSTOM_REPO="https://raw.githubusercontent.com/yann-soliman/ProxmoxVE/feat/seafile-script"
-
 function build_container() {
-  export FUNCTIONS_FILE_PATH="$(curl -fsSL ${CUSTOM_REPO}/misc/install.func)"
+  local custom_install_func_url
+  local custom_install_script_url
+
+  custom_install_func_url="${CUSTOM_REPO}/misc/install.func"
+  custom_install_script_url="${CUSTOM_REPO}/install/${var_install}.sh"
+
+  export FUNCTIONS_FILE_PATH="$(curl -fsSL "${custom_install_func_url}")"
   if [[ -z "$FUNCTIONS_FILE_PATH" || ${#FUNCTIONS_FILE_PATH} -lt 100 ]]; then
-    msg_error "Unable to load install.func from custom repo"
+    msg_error "Unable to load install.func from custom repo: ${custom_install_func_url}"
     exit 1
   fi
 
+  export CUSTOM_INSTALL_SCRIPT_URL="${custom_install_script_url}"
+
   header_info "$APP"
-  create_lxc
-  if [[ "$CT_CREATED" != "1" ]]; then
-    return
-  fi
+  create_lxc_container
+  CT_CREATED=1
 
   msg_info "Running custom Seafile install script from fork"
-  echo -e "${TAB}${BGN}${CUSTOM_REPO}/install/${var_install}.sh${CL}"
-  lxc-attach -n "$CTID" -- bash -c "$(curl -fsSL ${CUSTOM_REPO}/install/${var_install}.sh)"
+  echo -e "${TAB}${BGN}${CUSTOM_INSTALL_SCRIPT_URL}${CL}"
+  lxc-attach -n "$CTID" -- bash -c "$(curl -fsSL "${CUSTOM_INSTALL_SCRIPT_URL}")"
   local lxc_exit=$?
   if [[ $lxc_exit -ne 0 ]]; then
     msg_error "Custom Seafile install script failed with exit code ${lxc_exit}"
