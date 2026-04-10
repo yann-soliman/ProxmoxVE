@@ -52,7 +52,8 @@ prompt_with_default() {
   local prompt="$1"
   local default_value="$2"
   local result=""
-  read -r -e -p "${prompt} [${default_value}]: " result </dev/tty
+  printf "\n%s [%s]\n> " "${prompt}" "${default_value}" >/dev/tty
+  read -r result </dev/tty
   if [[ -z "${result}" ]]; then
     result="${default_value}"
   fi
@@ -67,9 +68,9 @@ validate_tarball_url_hint() {
     return 1
   fi
 
-  if [[ "${url}" == *"mode=list"* ]] || [[ "${url}" == *"/d/"*"?p="* ]]; then
-    msg_error "The provided URL looks like a Seafile library listing page, not a direct tarball download link"
-    echo "Provide the direct URL of the Seafile Pro archive file (.tar.gz, .tgz, .tar.xz, .zip), not the sharing page URL." >/dev/tty
+  if [[ "${url}" == *"mode=list"* ]]; then
+    msg_error "The provided URL still points to a Seafile listing page (mode=list), not a direct file"
+    echo "Open the file entry in Seafile and copy the final direct download URL, not the folder/listing URL." >/dev/tty
     return 1
   fi
 
@@ -82,15 +83,17 @@ validate_tarball_url_hint() {
 
 while true; do
   if [[ -n "${SEAFILE_TARBALL_URL:-}" ]]; then
-    printf 'Using Seafile Pro tarball URL from environment.\n' >/dev/tty
+    printf "\nUsing Seafile Pro tarball URL from environment.\n" >/dev/tty
   else
-    read -r -e -p "Seafile Pro tarball URL (direct archive link): " SEAFILE_TARBALL_URL </dev/tty
+    printf "\nSeafile Pro tarball URL (direct archive link)\nPaste the final file URL here, not the Seafile folder/list page.\n> " >/dev/tty
+    read -r SEAFILE_TARBALL_URL </dev/tty
   fi
 
   if validate_tarball_url_hint "${SEAFILE_TARBALL_URL}"; then
     break
   fi
 
+  printf "\nTry again.\n" >/dev/tty
   unset SEAFILE_TARBALL_URL
 done
 
